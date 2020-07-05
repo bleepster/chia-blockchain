@@ -5,7 +5,6 @@ import Container from "@material-ui/core/Container";
 import logo from "../assets/img/chia_logo.svg"; // Tell webpack this JS file uses this image
 import { withRouter } from "react-router-dom";
 import { connect, useDispatch } from "react-redux";
-import { add_key_hex } from "../modules/message";
 import Link from "@material-ui/core/Link";
 import ArrowBackIosIcon from "@material-ui/icons/ArrowBackIos";
 import Button from "@material-ui/core/Button";
@@ -95,7 +94,6 @@ const ImportHexKey = () => {
 
   function next() {
     if (!error && hexKey.length > 0) {
-      dispatch(add_key_hex(hexKey));
     }
   }
 

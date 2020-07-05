@@ -12,7 +12,7 @@ import Container from "@material-ui/core/Container";
 import logo from "../assets/img/chia_logo.svg"; // Tell webpack this JS file uses this image
 import { withRouter } from "react-router-dom";
 import { connect, useSelector, useDispatch } from "react-redux";
-import { log_in, delete_key, get_private_key } from "../modules/message";
+import { login_action, delete_key, get_private_key } from "../modules/message";
 import Link from "@material-ui/core/Link";
 import Button from "@material-ui/core/Button";
 import VisibilityIcon from "@material-ui/icons/Visibility";
@@ -22,6 +22,7 @@ import {
   presentNewWallet,
   presentImportHexKey
 } from "../modules/entranceMenu";
+import { resetMnemonic } from "../modules/mnemonic_input";
 
 const useStyles = makeStyles(theme => ({
   root: {
@@ -84,23 +85,24 @@ const SelectKey = () => {
   );
 
   const handleClick = fingerprint => {
-    return () => dispatch(log_in(fingerprint));
+    return () => {
+      dispatch(resetMnemonic());
+      dispatch(login_action(fingerprint));
+    };
   };
+
   const showKey = fingerprint => {
     return () => dispatch(get_private_key(fingerprint));
   };
 
   const handleDelete = fingerprint => {
-    return () => {
-      dispatch(delete_key(fingerprint));
-    };
+    return () => dispatch(delete_key(fingerprint));
   };
+
   const goToMnemonics = () => {
     dispatch(changeEntranceMenu(presentOldWallet));
   };
-  const goToHexKey = () => {
-    dispatch(changeEntranceMenu(presentImportHexKey));
-  };
+
   const goToNewWallet = () => {
     dispatch(changeEntranceMenu(presentNewWallet));
   };
@@ -178,17 +180,6 @@ const SelectKey = () => {
               className={classes.topButton}
             >
               Import from Mnemonics (24 words)
-            </Button>
-          </Link>
-          <Link onClick={goToHexKey}>
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              color="primary"
-              className={classes.bottomButton}
-            >
-              Import from hex private key
             </Button>
           </Link>
           <Link onClick={goToNewWallet}>
