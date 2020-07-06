@@ -20,7 +20,6 @@ from src.cmds.init import check_keys
 from src.server.outbound_message import NodeType, OutboundMessage, Message, Delivery
 from src.simulator.simulator_protocol import FarmNewBlockProtocol
 from src.util.ints import uint64, uint32
-from src.wallet.settings.settings_objects import BackupInitialized
 from src.wallet.trade_record import TradeRecord
 from src.wallet.util.cc_utils import trade_record_to_dict
 from src.wallet.util.wallet_types import WalletType
@@ -72,6 +71,7 @@ class WalletRpcApi:
             "/get_trade": self.get_trade,
             "/get_all_trades": self.get_all_trades,
             "/cancel_trade": self.cancel_trade,
+            "/create_backup": self.create_backup,
         }
 
     async def get_trade(self, request: Dict):
@@ -254,7 +254,7 @@ class WalletRpcApi:
         pending_balance = await wallet.get_unconfirmed_balance()
         spendable_balance = await wallet.get_spendable_balance()
         pending_change = await wallet.get_pending_change_balance()
-        if wallet.wallet_info.type == WalletType.COLOURED_COIN:
+        if wallet.wallet_info.type == WalletType.COLOURED_COIN.value:
             frozen_balance = 0
         else:
             frozen_balance = await wallet.get_frozen_amount()
@@ -297,7 +297,7 @@ class WalletRpcApi:
                     cc_wallet: CCWallet = await CCWallet.create_new_cc(
                         wallet_state_manager, main_wallet, request["amount"]
                     )
-                    return {"success": True, "type": cc_wallet.wallet_info.type.name}
+                    return {"success": True, "type": cc_wallet.wallet_info.type}
                 except Exception as e:
                     log.error("FAILED {e}")
                     return {"success": False, "reason": str(e)}
@@ -306,7 +306,7 @@ class WalletRpcApi:
                     cc_wallet = await CCWallet.create_wallet_for_cc(
                         wallet_state_manager, main_wallet, request["colour"]
                     )
-                    return {"success": True, "type": cc_wallet.wallet_info.type.name}
+                    return {"success": True, "type": cc_wallet.wallet_info.type}
                 except Exception as e:
                     log.error("FAILED2 {e}")
                     return {"success": False, "reason": str(e)}
@@ -376,7 +376,9 @@ class WalletRpcApi:
         wallet: CCWallet = self.service.wallet_state_manager.wallets[wallet_id]
         puzzle_hash = hexstr_to_bytes(request["innerpuzhash"])
         try:
-            tx = await wallet.cc_spend(request["amount"], puzzle_hash)
+            tx = await wallet.generate_signed_transaction(
+                request["amount"], puzzle_hash
+            )
         except Exception as e:
             data = {
                 "status": "FAILED",
@@ -441,7 +443,7 @@ class WalletRpcApi:
             wallet = self.service.wallet_state_manager.wallets[wallet_id]
             balance = await wallet.get_confirmed_balance()
             type = wallet.wallet_info.type
-            if type == WalletType.COLOURED_COIN:
+            if type == WalletType.COLOURED_COIN.value:
                 name = wallet.cc_info.my_colour_name
                 colour = await wallet.get_colour()
                 response[wallet_id] = {
@@ -493,16 +495,8 @@ class WalletRpcApi:
         return response
 
     async def create_backup(self, request):
-        file_path = request["file_path"]
+        file_path = Path(request["file_path"])
         await self.service.wallet_state_manager.create_wallet_backup(file_path)
-        response = {"success": True}
-        return response
-
-    async def load_backup(self, request):
-        if self.service.wallet_state_manager is None:
-            return {"success": False}
-        file_path = request["file_path"]
-        await self.service.wallet_state_manager.import_backup_info(file_path)
         response = {"success": True}
         return response
 
@@ -547,13 +541,14 @@ class WalletRpcApi:
     async def log_in(self, request):
         await self.stop_wallet()
         fingerprint = request["fingerprint"]
-        if "skip_backup_import" in request:
-            skip = request["skip_backup_import"]
+        type = request["type"]
+
+        if type == "skip":
             started = await self.service._start(
-                fingerprint=fingerprint, skip_backup_import=skip
+                fingerprint=fingerprint, skip_backup_import=True
             )
-        elif "backup_file" in request:
-            file_path = request["file_path"]
+        elif type == "restore_backup":
+            file_path = Path(request["file_path"])
             started = await self.service._start(
                 fingerprint=fingerprint, backup_file=file_path
             )
@@ -563,10 +558,8 @@ class WalletRpcApi:
         if started is True:
             return {"success": True}
         else:
-            if self.service.wallet_state_manager is not None:
-                initialized: BackupInitialized = self.service.wallet_state_manager.user_settings.get_backup_settings()
-                if initialized.user_initialized is False:
-                    return {"success": False, "error": "not_initialized"}
+            if self.service.backup_initialized is False:
+                return {"success": False, "error": "not_initialized"}
 
         return {"success": False, "error": "Unknown Error"}
 
